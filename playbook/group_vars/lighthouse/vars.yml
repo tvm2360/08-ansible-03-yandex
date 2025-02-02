@@ -1,0 +1,4 @@
+---
+lighthouse_repository: "https://github.com/VKCOM/lighthouse.git"
+lighthouse_web_user: "www-data"
+lighthouse_web_port: "8888"

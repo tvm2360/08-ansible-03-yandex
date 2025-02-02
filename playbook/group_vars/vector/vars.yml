@@ -1,0 +1,5 @@
+---
+vector_version: "0.44.0"
+vector_platform: "x86_64"
+vector_directory: "/opt"
+vector_clickhouse_ip: "172.17.0.2"

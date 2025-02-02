@@ -1,0 +1,24 @@
+sources:
+  parse_syslog:
+    type: "demo_logs"
+    format: "syslog"
+    interval: 1
+
+transforms:
+  parse_logs:
+    type: "remap"
+    inputs: ["parse_syslog"]
+    source: |
+      . = parse_syslog!(string!(.message))
+
+sinks:
+  syslogs_clickhouse_output:
+    type: clickhouse
+    inputs: ["parse_syslog"]
+    database: syslog
+    endpoint: 'http://{{ clickhouse_ip }}:8123'
+    table: logs
+    encoding:
+      timestamp_format: unix
+    batch:
+      timeout_secs: 10

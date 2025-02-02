@@ -1,0 +1,146 @@
+---
+
+- name: Install Clickhouse
+  hosts: clickhouse
+  handlers:
+    - name: Start clickhouse service
+      become: true
+      ansible.builtin.service:
+        name: clickhouse-server
+        state: restarted
+  tasks:
+    - block:
+        - name: Get clickhouse distrib
+          ansible.builtin.get_url:
+            url: "https://repo.yandex.ru/clickhouse/deb/pool/main/c/{{ item }}/{{ item }}_{{ clickhouse_version }}_all.deb"
+            dest: "/tmp/{{ item }}-{{ clickhouse_version }}.deb"
+          with_items: "{{ clickhouse_packages }}"
+      rescue:
+        - name: Get clickhouse distrib
+          ansible.builtin.get_url:
+            url: "https://repo.yandex.ru/clickhouse/deb/pool/main/c/clickhouse-common-static/clickhouse-common-static_{{ clickhouse_version }}_amd64.deb"
+            dest: "/tmp/clickhouse-common-static-{{ clickhouse_version }}.deb"
+    - block:
+        - name: Install clickhouse packages
+          become: true
+          apt:
+            deb: /tmp/{{ item }}-{{ clickhouse_version }}.deb
+          environment:
+            DEBIAN_FRONTEND: noninteractive
+          with_items: "{{ clickhouse_packages }}"
+          notify: Start clickhouse service
+    - name: Flush handlers
+      meta: flush_handlers
+    - name: Create database
+      ansible.builtin.command: "clickhouse-client -q 'create database logs;'"
+      register: create_db
+      failed_when: create_db.rc != 0 and create_db.rc !=82
+      changed_when: create_db.rc == 0
+
+- name: Install Vector
+  hosts: vector
+  handlers:
+    - name: Start vector service
+      become: true
+      ansible.builtin.service:
+        name: vector
+        state: restarted
+  tasks:
+    - name: Get and Unarchive vector distrib
+      become: true
+      ansible.builtin.unarchive:
+        remote_src: yes
+        src: "https://packages.timber.io/vector/{{ vector_version }}/vector-{{ vector_version }}-{{ vector_platform }}-unknown-linux-gnu.tar.gz"
+        dest: "{{ vector_directory }}"
+    - name: Move vector directory
+      become: true
+      command: "mv {{ vector_directory }}/vector-{{ vector_platform }}-unknown-linux-gnu {{ vector_directory }}/vector"
+      args:
+        creates: "{{ vector_directory }}/vector"
+    - name: Create systemd service Vector
+      become: true
+      copy:
+        dest: /etc/systemd/system/vector.service
+        content: |
+          [Unit]
+          Description=Vector Service
+          After=network.target
+          [Service]
+          ExecStart={{ vector_directory }}/vector/bin/vector --config {{ vector_directory }}/vector/config/vector.yaml
+          Restart=always
+          RestartSec=10
+          User=root
+          WorkingDirectory={{ vector_directory }}/vector
+          [Install]
+          WantedBy=multi-user.target
+    - name: Enable and start Vector service
+      become: true
+      systemd:
+        name: vector.service
+        enabled: yes
+        state: started
+        daemon_reload: yes
+    - name: Get vector config
+      become: true
+      vars:
+        clickhouse_ip: "{{ vector_clickhouse_ip }}"
+      template:
+        src=./roles/vector/templates/vector.yaml
+        dest="{{ vector_directory }}/vector/config/vector.yaml"
+      notify: Start vector service
+      tags:
+        - restart_vector
+    - name: Flush handlers
+      meta: flush_handlers
+
+- name: Install Lighthouse
+  hosts: lighthouse
+  handlers:
+    - name: Start lighthouse service
+      become: true
+      ansible.builtin.service:
+        name: nginx
+        state: restarted
+  pre_tasks:
+    - name: Update apt cache
+      become: true
+      apt:
+        update_cache: yes
+      environment:
+        DEBIAN_FRONTEND: noninteractive
+    - name: Install required packages and dependencies
+      become: true
+      apt:
+        name:
+          - git
+          - nginx
+        state: present
+  tasks:
+    - name: Clone repository lighthouse
+      become: true
+      git:
+        repo: "{{ lighthouse_repository }}"
+        dest: /opt/lighthouse
+        version: master
+    - name: Get lighthouse config (nginx.conf)
+      become: true
+      vars:
+        web_user: "{{ lighthouse_web_user }}"
+      template:
+        src=./roles/lighthouse/templates/nginx.conf.yaml
+        dest="/etc/nginx/nginx.conf"
+      notify: Start lighthouse service
+      tags:
+        - restart_lighthouse
+    - name: Get lighthouse config (lighthouse.conf)
+      become: true
+      vars:
+        web_port: "{{ lighthouse_web_port }}"
+      template:
+        src=./roles/lighthouse/templates/lighthouse.conf.yaml
+        dest="/etc/nginx/sites-enabled/lighthouse.conf"
+      notify: Start lighthouse service
+      tags:
+        - restart_lighthouse
+    - name: Flush handlers
+      meta: flush_handlers
