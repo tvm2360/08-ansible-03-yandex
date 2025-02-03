@@ -9,7 +9,7 @@
 ## Основная часть
 
 Заполняем в ./playbook/inventory/prod.yml соответствующие значения ansible_host IP виртуальных машин, проверяем
-корректность заполнения порта ssh (по умоляанию 22), а также имя пользователя c правами root и ссылку закрытый ключ:
+корректность заполнения порта ssh (по умолчанию 22), а также имя пользователя c правами root и ссылку закрытый ключ:
 
 ``` yaml
 clickhouse:
@@ -237,7 +237,7 @@ ansible-lint site.yml
 ```
 ![AnsibleLint](./pictures/AnsibleLint.png)
 
-предупреждение о ниобходимости указания версии в Git. 
+предупреждение о необходимости указания версии в Git. 
 
 После добавления версии ошибок нет
 ``` ansible
@@ -282,4 +282,8 @@ ansible-playbook -i inventory/prod.yml site.yml --diff
 ![Diff2](./pictures/Diff2.png)
 
 Playbook идемпотентен
+
+## WEB Lighthouse:
+
+![LighthouseWeb.png](./pictures/LighthouseWeb.png)
 
